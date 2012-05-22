@@ -126,6 +126,84 @@ Map.prototype.forEach = function (thunk) {
 };
 
 /**
+ * A URL split into its component parts.
+ */
+function Url(fullUrl, protocol, domain, path) {
+  this.fullUrl = fullUrl;
+  this.protocol = protocol;
+  this.domain = domain;
+  this.path = path;
+  parseDomainParts(domain, this);
+}
+
+/**
+ * Converts this URL to a JSON object.
+ */
+Url.prototype.toJSON = function () {
+  return this.fullUrl;
+};
+
+/**
+ * Returns the full domain of this URL (eg. "foo.bar.baz.com").
+ */
+Url.prototype.getDomain = function () {
+  return this.domain;
+};
+
+/**
+ * Returns the base domain of this URL, that is, the TLD and the first
+ * subdomain (eg. "baz.co.uk" for the full domain "foo.bar.baz.co.uk").
+ */
+Url.prototype.getBaseDomain = function () {
+  return this.baseDomain;
+};
+
+/**
+ * Returns the subdomain from the base domain for this URL (eg. "baz" for
+ * the full domain "foo.bar.baz.co.uk").
+ */
+Url.prototype.getBaseSubdomain = function () {
+  return this.baseSubdomain;
+};
+
+/**
+ * Returns the full string value of this URL.
+ */
+Url.prototype.getFullUrl = function () {
+  return this.fullUrl;
+};
+
+/**
+ * Returns the full path component of this URL.
+ */
+Url.prototype.getPath = function () {
+  return this.path;
+};
+
+Url.prototype.getFileName = function () {
+  var parts = this.path.split("/");
+  for (var i = parts.length - 1; i >= 0; i--) {
+    if (parts[i].length > 0)
+      return parts[i];
+  }
+  return null;
+};
+
+var URL_PATTERN = /(\w+):\/\/([^\/:]+)(:\d+)?(\/.*)?/;
+/**
+ * Parses a URL into its component parts. If the given string is not a valid
+ * url (as defined by this simple parser) null is returned.
+ */
+Url.parse = function (url) {
+  var parts = URL_PATTERN.exec(url);
+  if (!parts) {
+    return null;
+  } else {
+    return new Url(url, parts[1], parts[2], parts[4] || "");
+  }
+};
+
+/**
  * Simple wrapper around a rgb color.
  */
 function RGB(r, g, b) {

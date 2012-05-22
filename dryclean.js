@@ -3,71 +3,6 @@
  */
 var Promise = promise.Promise;
 
-/**
- * A URL split into its component parts.
- */
-function Url(fullUrl, protocol, domain, path) {
-  this.fullUrl = fullUrl;
-  this.protocol = protocol;
-  this.domain = domain;
-  this.path = path;
-  parseDomainParts(domain, this);
-}
-
-/**
- * Converts this URL to a JSON object.
- */
-Url.prototype.toJSON = function () {
-  return {
-    url: this.fullUrl,
-    base: this.baseSubdomain
-  };
-};
-
-/**
- * Returns the full domain of this URL (eg. "foo.bar.baz.com").
- */
-Url.prototype.getDomain = function () {
-  return this.domain;
-};
-
-/**
- * Returns the base domain of this URL, that is, the TLD and the first
- * subdomain (eg. "baz.co.uk" for the full domain "foo.bar.baz.co.uk").
- */
-Url.prototype.getBaseDomain = function () {
-  return this.baseDomain;
-};
-
-/**
- * Returns the subdomain from the base domain for this URL (eg. "baz" for
- * the full domain "foo.bar.baz.co.uk").
- */
-Url.prototype.getBaseSubdomain = function () {
-  return this.baseSubdomain;
-};
-
-/**
- * Returns the full string value of this URL.
- */
-Url.prototype.getFullUrl = function () {
-  return this.fullUrl;
-};
-
-var URL_PATTERN = /(\w+):\/\/([^\/:]+)(:\d+)?(\/.*)?/;
-/**
- * Parses a URL into its component parts. If the given string is not a valid
- * url (as defined by this simple parser) null is returned.
- */
-Url.parse = function (url) {
-  var parts = URL_PATTERN.exec(url);
-  if (!parts) {
-    return null;
-  } else {
-    return new Url(url, parts[1], parts[2], parts[4] || "");
-  }
-};
-
 function Alert(record) {
   this.record = record;
 }
@@ -93,17 +28,11 @@ Alert.prototype.getDomain = function () {
 /**
  * A record of a cookie being sent to a third party.
  */
-function CookieTransmission(target, referer) {
+function CookieTransmission(target, referer, timestamp) {
   this.target = target;
   this.referer = referer;
+  this.timestamp = timestamp;
 }
-
-CookieTransmission.prototype.toJSON = function () {
-  return {
-    target: this.target,
-    referer: this.referer
-  }
-};
 
 /**
  * A record for a single cookie.
@@ -157,15 +86,19 @@ CookieRecord.prototype.resetValue = function (value) {
   this.value = value;
   this.sourceDomains = new Map();
   this.history = [];
+  this.referersSeen = new Map();
 };
 
 /**
  * Records the fact that this cookie has been sent to a third party.
  */
-CookieRecord.prototype.notifySentToThirdParty = function (target, referer, cookie) {
+CookieRecord.prototype.notifySentToThirdParty = function (timestamp, target, referer, cookie) {
   this.updateValue(cookie.value);
+  if (this.referersSeen.contains(referer.getFullUrl()))
+    return;
+  this.referersSeen.put(referer.getFullUrl());
   this.sourceDomains.put(referer.getBaseSubdomain(), true);
-  this.history.push(new CookieTransmission(target, referer));
+  this.history.push(new CookieTransmission(target, referer, timestamp));
 };
 
 /**
@@ -224,10 +157,10 @@ TrackingCookieDetector.prototype.ensureDataFor = function (cookie) {
 /**
  * Records that a request has been sent to a third party containing a cookie.
  */
-TrackingCookieDetector.prototype.recordThirdPartyCookie = function (target, referer, cookie) {
+TrackingCookieDetector.prototype.recordThirdPartyCookie = function (timestamp, target, referer, cookie) {
   var data = this.ensureDataFor(cookie);
   var record = data.record;
-  record.notifySentToThirdParty(target, referer, cookie);
+  record.notifySentToThirdParty(timestamp, target, referer, cookie);
   var severity = record.getSeverity();
   if (severity != data.lastSeenSeverity) {
     data.lastSeenSeverity = severity;
@@ -279,23 +212,23 @@ function RequestProcessor(browser, detector) {
  * Given a request, its referer, and the cookies that were sent with the
  * request, record this event with the detector.
  */
-RequestProcessor.prototype.processThirdPartyCookies = function (requestUrl, refererUrl, cookies) {
+RequestProcessor.prototype.processThirdPartyCookies = function (timestamp, requestUrl, refererUrl, cookies) {
   var detector = this.detector;
   cookies.forEach(function (cookie) {
     var strippedCookie = StrippedCookie.from(cookie);
-    detector.recordThirdPartyCookie(requestUrl, refererUrl, strippedCookie);
+    detector.recordThirdPartyCookie(timestamp, requestUrl, refererUrl, strippedCookie);
   });
 };
 
 /**
  * Processes a reques that is known to be going to a third party.
  */
-RequestProcessor.prototype.processThirdPartyRequest = function (requestUrl, refererUrl) {
+RequestProcessor.prototype.processThirdPartyRequest = function (timestamp, requestUrl, refererUrl) {
   // Fetch the cookies through the cookie api. We do it this way because that
   // gives more information about the cookies than using the Cookie header
   // from the request info.
   this.browser.getCookies({url: requestUrl.getFullUrl()})
-    .onFulfilled(this.processThirdPartyCookies.bind(this, requestUrl, refererUrl))
+    .onFulfilled(this.processThirdPartyCookies.bind(this, timestamp, requestUrl, refererUrl))
     .onFailed(this.browser.getLogCallback());
 };
 
@@ -333,7 +266,7 @@ RequestProcessor.prototype.handleSendHeaders = function (requestInfo) {
     return false;
   // We've verified that this request is going to a third party. Now we have
   // to check the cookies going with it.
-  this.processThirdPartyRequest(requestUrl, refererUrl);
+  this.processThirdPartyRequest(requestInfo.timeStamp, requestUrl, refererUrl);
   return true;
 };
 
@@ -394,6 +327,7 @@ function BadgeController(browser) {
   this.browser = browser;
   this.baseNames = new Map();
   browser.addConnectListener(this.handleConnection.bind(this));
+  this.browser.setBadgeText({text: ""});
 }
 
 BadgeController.prototype.onSeverityChanged = function (record, severity) {

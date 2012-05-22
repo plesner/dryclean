@@ -49,7 +49,6 @@ ChromeController.prototype.setBadgeText = function (details) {
  * http://code.google.com/chrome/extensions/browserAction.html#method-setBadgeBackgroundColor
  */
 ChromeController.prototype.setBadgeBackgroundColor = function (details) {
-  console.log(details);
   return chrome.browserAction.setBadgeBackgroundColor(details);
 };
 
