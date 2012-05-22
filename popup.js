@@ -6,6 +6,7 @@ function CookieInfo(json) {
   this.history = json.history;
   this.sources = json.sources;
   this.sources.sort();
+  this.severity = json.severity;
 }
 
 CookieInfo.prototype.getHistoryLength = function () {
@@ -50,6 +51,13 @@ AlertInfo.prototype.display = function (root) {
   var domain = document.createElement("div");
   domain.className = "domain";
   var primary = this.getPrimaryCookie();
+  var severity = document.createElement("div");
+  root.appendChild(severity);
+  console.log(primary);
+  severity.className = "severity";
+  var color = RGB.between(RGB.LOW, primary.severity, RGB.HIGH);
+  severity.style.background = color;
+  severity.style.borderLeft = "1px solid " + color.darker(.1);
   domain.innerText = this.baseName + " (sites: " + primary.getSourceCount() + ", history:" + primary.getHistoryLength() + ")";
   root.appendChild(domain);
   var sources = document.createElement("div");
@@ -84,6 +92,13 @@ function AlertCollection(json) {
 }
 
 /**
+ * Does this collection hold any alerts?
+ */
+AlertCollection.prototype.isEmpty = function () {
+  return this.baseNames.getSize() == 0;
+}
+
+/**
  * Updates the DOM to display information about this set of alerts.
  */
 AlertCollection.prototype.updateDisplay = function (root) {
@@ -113,8 +128,16 @@ AlertCollection.prototype.updateDisplay = function (root) {
  * Handles messages from the badge.
  */
 function handleMessage(message) {
+  console.log(message);
   var alerts = new AlertCollection(message.state);
-  alerts.updateDisplay(document.getElementById("main"));
+  if (alerts.isEmpty()) {
+  var empty = document.getElementById("empty");
+    empty.style.display = null;
+  } else {
+    var main = document.getElementById("main");
+    main.style.display = null;
+    alerts.updateDisplay(main);
+  }
 }
 
 function onLoad() {

@@ -17,7 +17,7 @@ function Url(fullUrl, protocol, domain, path) {
 /**
  * Converts this URL to a JSON object.
  */
-Url.prototype.toJson = function () {
+Url.prototype.toJSON = function () {
   return {
     url: this.fullUrl,
     base: this.baseSubdomain
@@ -72,7 +72,7 @@ function Alert(record) {
   this.record = record;
 }
 
-Alert.prototype.toJson = function () {
+Alert.prototype.toJSON = function () {
   return {
     domain: this.getDomain(),
     sources: this.record.sourceDomains.keys(),
@@ -98,8 +98,11 @@ function CookieTransmission(target, referer) {
   this.referer = referer;
 }
 
-CookieTransmission.prototype.toJson = function () {
-  return {target: this.target.toJson(), referer: this.referer.toJson()};
+CookieTransmission.prototype.toJSON = function () {
+  return {
+    target: this.target,
+    referer: this.referer
+  }
 };
 
 /**
@@ -131,7 +134,8 @@ CookieRecord.prototype.toJSON = function () {
       name: this.protoCookie.name,
     },
     sources: this.sourceDomains.keys(),
-    history: this.history.map(function (e) { return e.toJson() })
+    history: this.history,
+    severity: this.getSeverity()
   };
 };
 
@@ -172,23 +176,24 @@ CookieRecord.prototype.getBaseName = function () {
 };
 
 /**
- * Returns the severity of the activity recorded by this object.
+ * Returns the severity of the activity recorded by this object. -1 means
+ * no severity, a value between 0 and 1 means nontrivial severity.
  */
 CookieRecord.prototype.getSeverity = function () {
-  if (this.sourceDomains.size >= 3) {
-    return 1;
-  } else if (this.sourceDomains.size >= 5) {
-    return 2;
-  } else if (this.sourceDomains.size >= 10) {
-    return 3;
-  } else {
+  if (this.sourceDomains.getSize() < 3) {
+    return -1;
+  } else if (this.sourceDomains.size < 5) {
     return 0;
+  } else if (this.sourceDomains.size < 10) {
+    return 0.5;
+  } else {
+    return 1;
   }
 };
 
 function CookieData(protoCookie) {
   this.record = new CookieRecord(protoCookie);
-  this.lastSeenSeverity = 0;
+  this.lastSeenSeverity = -1;
 }
 
 /**
@@ -244,8 +249,8 @@ TrackingCookieDetector.prototype.fireSeverityChanged = function (record, severit
  */
 TrackingCookieDetector.prototype.removeRecord = function (cookie) {
   var oldData = this.cookieData.remove(cookie.getId());
-  if (oldData && oldData.lastSeenSeverity > 0)
-    this.fireSeverityChanged(oldData.record, 0);
+  if (oldData && oldData.lastSeenSeverity != -1)
+    this.fireSeverityChanged(oldData.record, -1);
 };
 
 /**
@@ -393,7 +398,7 @@ function BadgeController(browser) {
 
 BadgeController.prototype.onSeverityChanged = function (record, severity) {
   var baseName = record.getBaseName();
-  if (severity == 0) {
+  if (severity == -1) {
     this.removeRecord(baseName, record);
   } else {
     this.updateRecord(baseName, record);
@@ -423,15 +428,36 @@ BadgeController.prototype.removeRecord = function (baseName, record) {
     if (map.getSize() == 0)
       this.baseNames.remove(baseName);
   }
-}
+};
+
+/**
+ * Returns the current highest severity.
+ */
+BadgeController.prototype.getHighestSeverity = function () {
+  var value = -1;
+  this.baseNames.forEach(function (baseName, records) {
+    records.forEach(function (id, record) {
+      var severity = record.getSeverity();
+      if (severity > value)
+        value = severity;
+    });
+  });
+  return value;
+};
 
 BadgeController.prototype.updateBadgeState = function () {
+  var severity = this.getHighestSeverity();
+  var color = RGB.between(RGB.LOW, severity, RGB.HIGH);
+  this.browser.setBadgeBackgroundColor({color: String(color)});
   this.browser.setBadgeText({text: String(this.baseNames.getSize())});
-  this.browser.setBrowserActionTitle({title: this.baseNames.keys().join(", ")});
 };
 
 BadgeController.prototype.toJSON = function () {
-  return {baseNames: this.baseNames.map(function (elm) { return elm.values(); })};
+  return {
+    baseNames: this.baseNames.map(function (elm) {
+      return elm.values();
+    })
+  };
 };
 
 BadgeController.prototype.handleConnection = function (port) {

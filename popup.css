@@ -3,15 +3,31 @@ body {
   font-size: 10pt;
 }
 
-#main {
+.container {
   width: 400px;
 }
 
 .alert {
   margin-bottom: 5px;
   padding: 2px;
+  padding-left: 4px;
   border: 1px solid #D1D1D1;
   background: #F1F1F1;
+  cursor: pointer;
+  position: relative;
+}
+
+.severity {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 6px;
+}
+
+.alert:hover {
+  border-color: #CAD0EB;
+  background: #E8EBFF;
 }
 
 .domain {
@@ -25,4 +41,17 @@ body {
 
 .label {
   font-weight: bold;
+}
+
+.emptyBox {
+  margin-bottom: 5px;
+  padding: 2px;
+  border: 1px solid #B4DFB0;
+  background: #E1FFDD;
+}
+
+.emptyMessage {
+  text-align: center;
+  margin-top: 5px;
+  margin-bottom: 5px;
 }

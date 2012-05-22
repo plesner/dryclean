@@ -124,3 +124,39 @@ Map.prototype.forEach = function (thunk) {
       thunk(prop, this.elements[prop]);
   }
 };
+
+/**
+ * Simple wrapper around a rgb color.
+ */
+function RGB(r, g, b) {
+  this.r = r;
+  this.g = g;
+  this.b = b;
+}
+
+RGB.prototype.darker = function (percent) {
+  return RGB.between(this, percent, RGB.BLACK);
+};
+
+RGB.prototype.toString = function () {
+  function toHex(value) {
+    var rounded = value << 0;
+    if (rounded < 16) {
+      return "0" + rounded.toString(16);
+    } else {
+      return rounded.toString(16);
+    }
+  }
+  return "#" + toHex(this.r) + toHex(this.g) + toHex(this.b);
+};
+
+RGB.between = function (from, percent, to) {
+  var r = (to.r * percent) + (from.r * (1 - percent));
+  var g = (to.g * percent) + (from.g * (1 - percent));
+  var b = (to.b * percent) + (from.b * (1 - percent));
+  return new RGB(r, g, b);
+};
+
+RGB.HIGH = new RGB(0xDB, 0x25, 0x25);
+RGB.LOW = new RGB(0xFF, 0xD7, 0x00);
+RGB.BLACK = new RGB(0x00, 0x00, 0x00);
