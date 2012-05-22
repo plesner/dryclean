@@ -1,0 +1,28 @@
+body {
+  font-family: sans-serif;
+  font-size: 10pt;
+}
+
+#main {
+  width: 400px;
+}
+
+.alert {
+  margin-bottom: 5px;
+  padding: 2px;
+  border: 1px solid #D1D1D1;
+  background: #F1F1F1;
+}
+
+.domain {
+  font-family: Georgia, serif;
+  font-weight: bold;
+}
+
+.source {
+  text-decoration: underline;
+}
+
+.label {
+  font-weight: bold;
+}
