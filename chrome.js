@@ -22,10 +22,10 @@ ChromeController.prototype.addCookieChangeListener = function (callback) {
 
 /**
  * Adds a connect listener. See
- * http://code.google.com/chrome/extensions/extension.html#event-onConnect
+ * http://code.google.com/chrome/extensions/extension.html#event-onRequest
  */
-ChromeController.prototype.addConnectListener = function (callback) {
-  return chrome.extension.onConnect.addListener(callback);
+ChromeController.prototype.addOnRequestListener = function (callback) {
+  return chrome.extension.onRequest.addListener(callback);
 };
 
 /**
@@ -67,6 +67,21 @@ ChromeController.prototype.getLogCallback = function () {
   return function (error, trace) {
     console.log(trace.toString());
   };
+};
+
+/**
+ * Sends the given request to the badge. See
+ * http://code.google.com/chrome/extensions/extension.html#method-sendRequest.
+ */
+ChromeController.prototype.sendRequest = function (varArgs) {
+  var args = Array.prototype.slice.call(arguments, 0);
+  return Promise
+    .fromCallbackMethod(chrome.extension, "sendRequest", null, args)
+    .lazyThen(function (result) {
+      return result.failed
+        ? Promise.error(result.data)
+        : Promise.of(result.data);
+    });
 };
 
 /**

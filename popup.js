@@ -175,7 +175,7 @@ AlertCollection.prototype.updateDisplay = function (root) {
 /**
  * Handles messages from the badge.
  */
-function handleMessage(message) {
+function displayAlerts(message) {
   var alerts = new AlertCollection(message.state);
   if (alerts.isEmpty()) {
   var empty = document.getElementById("empty");
@@ -188,10 +188,8 @@ function handleMessage(message) {
 }
 
 function onLoad() {
-  // Open a connection to the badge and wait for it to call back with an
-  // update.
-  var port = chrome.extension.connect({name: "dryclean.popup"});
-  port.onMessage.addListener(function (message) {
-    handleMessage(message);
-  });
+  var browser = getBrowserController();
+  browser.sendRequest("getAlerts")
+    .onFulfilled(displayAlerts)
+    .onFailed(browser.getLogCallback());
 }

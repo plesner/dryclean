@@ -1,8 +1,3 @@
-/**
- * Shorthand for the promise constructor.
- */
-var Promise = promise.Promise;
-
 function Alert(record) {
   this.record = record;
 }
@@ -41,6 +36,7 @@ function CookieRecord(protoCookie) {
   this.protoCookie = protoCookie;
   this.sourceDomains = new Map();
   this.history = [];
+  this.value = protoCookie.value;
   var domainParts = parseDomainParts(protoCookie.domain);
   this.baseName = domainParts.baseSubdomain;
 }
@@ -61,6 +57,7 @@ CookieRecord.prototype.toJSON = function () {
       domain: this.protoCookie.domain,
       path: this.protoCookie.path,
       name: this.protoCookie.name,
+      value: this.value
     },
     sources: this.sourceDomains.keys(),
     history: this.history,
@@ -86,7 +83,6 @@ CookieRecord.prototype.resetValue = function (value) {
   this.value = value;
   this.sourceDomains = new Map();
   this.history = [];
-  this.referersSeen = new Map();
 };
 
 /**
@@ -94,9 +90,6 @@ CookieRecord.prototype.resetValue = function (value) {
  */
 CookieRecord.prototype.notifySentToThirdParty = function (timestamp, target, referer, cookie) {
   this.updateValue(cookie.value);
-  if (this.referersSeen.contains(referer.getFullUrl()))
-    return;
-  this.referersSeen.put(referer.getFullUrl());
   this.sourceDomains.put(referer.getBaseSubdomain(), true);
   this.history.push(new CookieTransmission(target, referer, timestamp));
 };
@@ -326,7 +319,7 @@ RequestProcessor.prototype.handleCookieChanged = function (cookieInfo) {
 function BadgeController(browser) {
   this.browser = browser;
   this.baseNames = new Map();
-  browser.addConnectListener(this.handleConnection.bind(this));
+  browser.addOnRequestListener(this.onRequest.bind(this));
   this.browser.setBadgeText({text: ""});
 }
 
@@ -338,6 +331,21 @@ BadgeController.prototype.onSeverityChanged = function (record, severity) {
     this.updateRecord(baseName, record);
   }
   this.updateBadgeState();
+};
+
+BadgeController.prototype.onRequest = function (request, sender, sendResponse) {
+  var method = request[0];
+  var args = request.slice(1);
+  try {
+    var value = this[method].apply(this, args);
+    sendResponse({failed: false, data: value});
+  } catch (e) {
+    sendResponse({failed: true, data: String(e)});
+  }
+};
+
+BadgeController.prototype.getAlerts = function () {
+  return {state: this};
 };
 
 /**

@@ -3,6 +3,7 @@
   "version": "0.1",
   "description": "Checks for tracking cookies",
   "background_page": "background.html",
+  "options_page": "options.html",
   "browser_action": {
     "default_title": "Dry Clean",
     "default_popup": "popup.html",

@@ -1,4 +1,9 @@
 /**
+ * Shorthand for the promise constructor.
+ */
+var Promise = promise.Promise;
+
+/**
  * Converts a value to a JSON-able object or returns it unchanged if it has
  * no custom converter method.
  */
