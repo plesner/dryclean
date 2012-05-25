@@ -24,7 +24,7 @@ function parseDomainParts(domain, resultOpt) {
   var parts = domain.split(".");
   var index = getBaseIndex(parts, SUFFIXES, parts.length);
   result.baseDomain = parts.slice(index).join(".")
-  result.baseSubdomain = parts[index];
+  result.baseName = parts[index];
   return result;
 };
 

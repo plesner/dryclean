@@ -43,8 +43,10 @@ HistoryEntry.prototype.display = function (root) {
 function CookieInfo(json) {
   this.cookie = json.cookie;
   this.history = json.history.map(function (entry) { return new HistoryEntry(entry); });
-  this.sources = json.sources;
-  this.sources.sort();
+  this.baseNamesSeen = json.baseNamesSeen;
+  this.baseNamesSeen.sort();
+  this.baseDomainsSeen = json.baseDomainsSeen;
+  this.baseDomainsSeen.sort();
   this.severity = json.severity;
 }
 
@@ -53,7 +55,7 @@ CookieInfo.prototype.getHistoryLength = function () {
 };
 
 CookieInfo.prototype.getSourceCount = function () {
-  return this.sources.length;
+  return this.baseNamesSeen.length;
 };
 
 /**
@@ -106,7 +108,7 @@ AlertInfo.prototype.display = function (root) {
   sentFrom.className = "label";
   sources.appendChild(sentFrom);
   var first = true;
-  primary.sources.forEach(function (source) {
+  primary.baseDomainsSeen.forEach(function (source) {
     if (first) {
       first = false;
     } else {

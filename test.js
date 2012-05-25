@@ -132,7 +132,7 @@ function testUrlBaseDomain() {
 
 function testUrlBaseName() {
   function getBase(str) {
-    return Url.parse(str).getBaseSubdomain();
+    return Url.parse(str).getBaseName();
   }
   assertEquals("com", getBase("http://com/fas"));
   assertEquals("com", getBase("http://com.au/fas"));

@@ -164,11 +164,11 @@ Url.prototype.getBaseDomain = function () {
 };
 
 /**
- * Returns the subdomain from the base domain for this URL (eg. "baz" for
+ * Returns the subdomain name from the base domain for this URL (eg. "baz" for
  * the full domain "foo.bar.baz.co.uk").
  */
-Url.prototype.getBaseSubdomain = function () {
-  return this.baseSubdomain;
+Url.prototype.getBaseName = function () {
+  return this.baseName;
 };
 
 /**

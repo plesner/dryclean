@@ -1,25 +1,3 @@
-function Alert(record) {
-  this.record = record;
-}
-
-Alert.prototype.toJSON = function () {
-  return {
-    domain: this.getDomain(),
-    sources: this.record.sourceDomains.keys(),
-    name: this.record.name,
-    value: this.record.value
-  };
-}
-
-Alert.prototype.getDomain = function () {
-  var parts = [];
-  this.record.domain.split('.').forEach(function (part) {
-    if (part.length > 0)
-      parts.push(part);
-  });
-  return parts.join(".");
-};
-
 /**
  * A record of a cookie being sent to a third party.
  */
@@ -34,12 +12,21 @@ function CookieTransmission(target, referer, timestamp) {
  */
 function CookieRecord(protoCookie) {
   this.protoCookie = protoCookie;
-  this.sourceDomains = new Map();
-  this.history = [];
-  this.value = protoCookie.value;
   var domainParts = parseDomainParts(protoCookie.domain);
-  this.baseName = domainParts.baseSubdomain;
+  this.baseName = domainParts.baseName;
+  this.resetValue(protoCookie.value);
 }
+
+/**
+ * Resets the cookie value to the given one and clears all state that depended
+ * on the old value.
+ */
+CookieRecord.prototype.resetValue = function (value) {
+  this.lastSeenValue = value;
+  this.baseNamesSeen = new Map();
+  this.baseDomainsSeen = new Map();
+  this.history = [];
+};
 
 /**
  * Returns the proto cookie for this record.
@@ -57,9 +44,10 @@ CookieRecord.prototype.toJSON = function () {
       domain: this.protoCookie.domain,
       path: this.protoCookie.path,
       name: this.protoCookie.name,
-      value: this.value
+      value: this.lastSeenValue
     },
-    sources: this.sourceDomains.keys(),
+    baseNamesSeen: this.baseNamesSeen.keys(),
+    baseDomainsSeen: this.baseDomainsSeen.keys(),
     history: this.history,
     severity: this.getSeverity()
   };
@@ -71,18 +59,8 @@ CookieRecord.prototype.toJSON = function () {
  */
 CookieRecord.prototype.updateValue = function (value) {
   // If it has been sent with a different value we clear the record.
-  if (value != this.value)
+  if (value != this.lastSeenValue)
     this.resetValue(value);
-};
-
-/**
- * Resets the cookie value to the given one and clears all state that depended
- * on the old value.
- */
-CookieRecord.prototype.resetValue = function (value) {
-  this.value = value;
-  this.sourceDomains = new Map();
-  this.history = [];
 };
 
 /**
@@ -90,7 +68,8 @@ CookieRecord.prototype.resetValue = function (value) {
  */
 CookieRecord.prototype.notifySentToThirdParty = function (timestamp, target, referer, cookie) {
   this.updateValue(cookie.value);
-  this.sourceDomains.put(referer.getBaseSubdomain(), true);
+  this.baseNamesSeen.put(referer.getBaseName(), true);
+  this.baseDomainsSeen.put(referer.getBaseDomain(), true);
   this.history.push(new CookieTransmission(target, referer, timestamp));
 };
 
@@ -106,11 +85,11 @@ CookieRecord.prototype.getBaseName = function () {
  * no severity, a value between 0 and 1 means nontrivial severity.
  */
 CookieRecord.prototype.getSeverity = function () {
-  if (this.sourceDomains.getSize() < 3) {
+  if (this.baseNamesSeen.getSize() < 3) {
     return -1;
-  } else if (this.sourceDomains.size < 5) {
+  } else if (this.baseNamesSeen.size < 5) {
     return 0;
-  } else if (this.sourceDomains.size < 10) {
+  } else if (this.baseNamesSeen.size < 10) {
     return 0.5;
   } else {
     return 1;
@@ -254,7 +233,7 @@ RequestProcessor.prototype.handleSendHeaders = function (requestInfo) {
   var requestUrl = Url.parse(requestInfo.url);
   if (requestUrl == null)
     return false;
-  if (refererUrl.getBaseSubdomain() == requestUrl.getBaseSubdomain())
+  if (refererUrl.getBaseName() == requestUrl.getBaseName())
     // This request seems to be going to the same place so that seems okay.
     return false;
   // We've verified that this request is going to a third party. Now we have
@@ -409,7 +388,7 @@ BadgeController.prototype.handleConnection = function (port) {
 }
 
 /**
- * Install the tracking code.
+ * Install the cookie monitoring tools.
  */
 function installDryClean() {
   var browser = getBrowserController();
