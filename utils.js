@@ -209,6 +209,49 @@ Url.parse = function (url) {
 };
 
 /**
+ * Given a number of elements and a probability, returns a value X such that
+ * if a uniformly random element is selected X times out of the total set the
+ * likelihood of picking the same one is at most the given probability.
+ */
+function getSeparableSetWithProbability(elementCount, collProb) {
+  var noCollProb = (1 - collProb);
+  return (Math.sqrt(8 * elementCount * Math.log(1 / noCollProb) + 1) + 1) / 2;
+}
+
+/**
+ * Given a number of elements of a set S returns the size of the set T that
+ * can be reliably distinguished by assigning each element in T a uniformly
+ * random element from S.
+ *
+ * This is an expensive operation and should only be used for testing and
+ * tweaking getSeparableSetSizeEstimate.
+ */
+function getSeparableSetSize(elementCount) {
+  var lastCurrent = 0;
+  var current = Math.sqrt(elementCount);
+  while (Math.abs(current - lastCurrent) > 0.0001) {
+    var nextCurrent = getSeparableSetWithProbability(elementCount, 1 / current);
+    lastCurrent = current;
+    current = nextCurrent;
+  }
+  return current;
+}
+
+/**
+ * Returns an estimate for getSeparableSetSize base on running exponential
+ * regression on getSeparableSetSize. Is much cheaper than getSeparableSetSize.
+ *
+ * Calculated using the "Exponential With Offset" regression at zunzun.com.
+ */
+function getSeparableSetSizeEstimate(elementCount) {
+  var A = 1.2599157851973919;
+  var B = 0.23104914467081800;
+  var O = 0.51061745965509431;
+  var bitCount = Math.log(elementCount) / Math.LN2;
+  return A * Math.exp(B * bitCount) + O;
+}
+
+/**
  * Simple wrapper around a rgb color.
  */
 function RGB(r, g, b) {
