@@ -1,3 +1,115 @@
+/**
+ * Really quick and dirty dom construction framework.
+ */
+function DomBuilder(parent) {
+  this.stack = [parent];
+  this.current = parent;
+}
+
+/**
+ * Returns a new dom builder that attaches to the given parent.
+ */
+function attach(parent) {
+  return new DomBuilder(parent);
+}
+
+/**
+ * Begins a new element with the given tag name, attaching it to the current
+ * element.
+ */
+DomBuilder.prototype.begin = function (tagName) {
+  var elm = document.createElement(tagName);
+  this.current.appendChild(elm);
+  this.stack.push(elm);
+  this.current = elm;
+  return this;
+};
+
+/**
+ * Removes all children under the current element.
+ */
+DomBuilder.prototype.clearChildren = function () {
+  while (this.current.hasChildNodes())
+    this.current.removeChild(this.current.firstChild);
+  return this;
+}
+
+/**
+ * Appends a string to the current element.
+ */
+DomBuilder.prototype.appendText = function (str) {
+  this.current.appendChild(document.createTextNode(str));
+  return this;
+};
+
+/**
+ * Sets an attribute of the current element.
+ */
+DomBuilder.prototype.setAttribute = function (name, value) {
+  this.current[name] = value;
+  return this;
+};
+
+/**
+ * Sets a style attribute on the current node.
+ */
+DomBuilder.prototype.setStyle = function (name, value) {
+  this.current.style[name] = value;
+  return this;
+}
+
+/**
+ * Adds a CSS class name to the current element.
+ */
+DomBuilder.prototype.addClass = function(name) {
+  if (this.current.className) {
+    this.current.className += " " + name;
+  } else {
+    this.current.className = name;
+  }
+  return this;
+};
+
+/**
+ * Invokes the given thunk with the current node.
+ */
+DomBuilder.prototype.withCurrentNode = function (thunk) {
+  thunk(this.current);
+  return this;
+};
+
+/**
+ * Returns the current node.
+ */
+DomBuilder.prototype.getCurrentNode = function () {
+  return this.current;
+};
+
+/**
+ * Invokes the given thunk with the current node.
+ */
+DomBuilder.prototype.withThis = function (thunk) {
+  thunk(this);
+  return this;
+}
+
+/**
+ * Adds a listener for the given event type to the current element.
+ */
+DomBuilder.prototype.addEventListener = function (event, handler) {
+  this.current.addEventListener(event, handler);
+  return this;
+}
+
+/**
+ * Ends the current element and replaces it as the current with its parent.
+ */
+DomBuilder.prototype.end = function () {
+  this.stack.pop();
+  this.current = this.stack[this.stack.length-1];
+  return this;
+};
+
 function HistoryEntry(json) {
   this.target = json.target;
   this.referer = json.referer;
@@ -17,11 +129,8 @@ function formatDate(timestamp) {
          toDigits(date.getMinutes());
 }
 
-HistoryEntry.prototype.display = function (root) {
+HistoryEntry.prototype.display = function (builder) {
   var referer = Url.parse(this.referer);
-  var item = document.createElement("li");
-  root.appendChild(item);
-  item.appendChild(document.createTextNode(formatDate(this.timestamp) + ": "));
   var name = referer.getFileName();
   if (name == null) {
     name = referer.getDomain();
@@ -30,11 +139,15 @@ HistoryEntry.prototype.display = function (root) {
   }
   if (name.length > 32)
     name = name.slice(0, 32) + "...";
-  var link = document.createElement("a");
-  item.appendChild(link);
-  link.href = this.referer;
-  link.title = this.referer;
-  link.appendChild(document.createTextNode(name));
+  builder
+    .begin("li")
+      .appendText(formatDate(this.timestamp) + ": ")
+      .begin("a")
+        .setAttribute("href", this.referer)
+        .setAttribute("title", this.referer)
+        .appendText(name)
+      .end()
+    .end();
 };
 
 /**
@@ -65,6 +178,7 @@ function AlertInfo(baseName, cookies) {
   this.baseName = baseName;
   this.cookies = cookies.map(function (cookie) { return new CookieInfo(cookie); });
   this.primaryCookieCache = null;
+  this.openElement = null;
 }
 
 /**
@@ -88,48 +202,62 @@ AlertInfo.prototype.getPrimaryCookie = function () {
 /**
  * Displays this information in the DOM using the specified root as the parent.
  */
-AlertInfo.prototype.display = function (root) {
-  root.addEventListener('click', this.onClick.bind(this, root));
-  var domain = document.createElement("div");
-  domain.className = "domain";
+AlertInfo.prototype.display = function (builder) {
   var primary = this.getPrimaryCookie();
-  var severity = document.createElement("div");
-  root.appendChild(severity);
-  severity.className = "severity";
-  var color = RGB.between(RGB.LOW, primary.severity, RGB.HIGH);
-  severity.style.background = color;
-  severity.style.borderLeft = "1px solid " + color.darker(.1);
-  domain.innerText = this.baseName + " (sites: " + primary.getSourceCount() + ", history:" + primary.getHistoryLength() + ")";
-  root.appendChild(domain);
-  var sources = document.createElement("div");
-  sources.className = "sources";
-  var sentFrom = document.createElement("span");
-  sentFrom.innerText = "Sent from ";
-  sentFrom.className = "label";
-  sources.appendChild(sentFrom);
-  var first = true;
-  primary.baseDomainsSeen.forEach(function (source) {
-    if (first) {
-      first = false;
-    } else {
-      sources.appendChild(document.createTextNode(", "));
-    }
-    var sourceSpan = document.createElement("span");
-    sourceSpan.className = "source";
-    sourceSpan.innerText = source;
-    sources.appendChild(sourceSpan);
-  });
-  sources.appendChild(document.createTextNode("."));
-  root.appendChild(sources);
+  function setSeverityStyle(builder) {
+    var color = RGB.between(RGB.LOW, primary.severity, RGB.HIGH);
+    builder
+      .setStyle("background", color)
+      .setStyle("borderLeft", "1px solid " + color.darker(.1));
+  }
+  var title = this.baseName + " (sites: " + primary.getSourceCount() + ", history:" + primary.getHistoryLength() + ")";
+  function addSources(builder) {
+    primary.baseDomainsSeen.forEach(function (source, index) {
+      builder
+        .appendText(index == 0 ? "" : ", ")
+        .begin("span")
+          .addClass("source")
+          .appendText(source)
+        .end();
+    });
+  }
+  builder
+    .addEventListener('click', this.onClick.bind(this, builder.getCurrentNode()))
+    .begin("div")
+      .addClass("domain")
+      .appendText(title)
+    .end()
+    .begin("div")
+      .addClass("sources")
+      .begin("span")
+        .addClass("label")
+        .appendText("Sent from ")
+      .end()
+      .withThis(addSources)
+      .appendText(".")
+    .end()
+    .begin("div")
+      .addClass("severity")
+      .withThis(setSeverityStyle)
+    .end();
 };
 
 AlertInfo.prototype.onClick = function (root, event) {
-  var history = document.createElement("ul");
-  root.appendChild(history);
-  var primary = this.getPrimaryCookie();
-  primary.history.forEach(function (entry) {
-    entry.display(history);
-  });
+  if (this.openElement) {
+    root.removeChild(this.openElement);
+    this.openElement = null;
+  } else {
+    var primary = this.getPrimaryCookie();
+    attach(root)
+      .begin("ul")
+      .withThis(function (builder) {
+        this.openElement = builder.getCurrentNode();
+        primary.history.forEach(function (entry) {
+          entry.display(builder);
+        });
+      }.bind(this))
+      .end();
+  }
 };
 
 /**
@@ -151,28 +279,35 @@ AlertCollection.prototype.isEmpty = function () {
 /**
  * Updates the DOM to display information about this set of alerts.
  */
-AlertCollection.prototype.updateDisplay = function (root) {
-  // First clean out previous child nodes, just in case.
-  while (root.hasChildNodes())
-    root.removeChild(root.firstChild);
-  // Then add an entry for each base name.
-  var sortedNames = this.baseNames.keys();
+AlertCollection.prototype.updateDisplay = function (builder) {
+  var baseNames = this.baseNames;
+  var sortedNames = baseNames.keys();
   sortedNames.sort(function (a, b) {
-    var aCookie = this.baseNames.get(a).getPrimaryCookie();
-    var bCookie = this.baseNames.get(b).getPrimaryCookie();
+    var aCookie = baseNames.get(a).getPrimaryCookie();
+    var bCookie = baseNames.get(b).getPrimaryCookie();
     var sourceDiff = bCookie.getSourceCount() - aCookie.getSourceCount();
     if (sourceDiff != 0)
       return sourceDiff;
     return bCookie.getHistoryLength() - aCookie.getHistoryLength();
-  }.bind(this));
-  sortedNames.forEach(function (baseName) {
-    var alertInfo = this.baseNames.get(baseName);
-    var div = document.createElement("div");
-    div.className = "alert";
-    alertInfo.display(div);
-    root.appendChild(div);
-  }.bind(this));
+  });
+  function addAlerts(builder) {
+    sortedNames.forEach(function (baseName) {
+      var alertInfo = baseNames.get(baseName);
+      builder
+        .begin("div")
+          .addClass("alert")
+          .withThis(alertInfo.display.bind(alertInfo))
+        .end();
+    });
+  }
+  builder
+    .clearChildren()
+    .withThis(addAlerts);
 };
+
+function Timeline(root) {
+  this.root = root;
+}
 
 /**
  * Handles messages from the badge.
@@ -185,7 +320,7 @@ function displayAlerts(message) {
   } else {
     var main = document.getElementById("main");
     main.style.display = null;
-    alerts.updateDisplay(main);
+    alerts.updateDisplay(attach(main));
   }
 }
 
