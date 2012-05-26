@@ -85,11 +85,11 @@ CookieRecord.prototype.getBaseName = function () {
  * no severity, a value between 0 and 1 means nontrivial severity.
  */
 CookieRecord.prototype.getSeverity = function () {
-  if (this.baseNamesSeen.getSize() < 3) {
+  if (this.baseNamesSeen.getSize() < 5) {
     return -1;
-  } else if (this.baseNamesSeen.size < 5) {
-    return 0;
   } else if (this.baseNamesSeen.size < 10) {
+    return 0;
+  } else if (this.baseNamesSeen.size < 20) {
     return 0.5;
   } else {
     return 1;

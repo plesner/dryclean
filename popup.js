@@ -157,6 +157,7 @@ HistoryEntry.prototype.display = function (builder) {
       .begin("a")
         .setAttribute("href", this.referer)
         .setAttribute("title", this.referer)
+        .setAttribute("target", "_blank")
         .appendText(name)
       .end()
     .end();
@@ -217,33 +218,47 @@ AlertInfo.prototype.getPrimaryCookie = function () {
 AlertInfo.prototype.display = function (builder) {
   var primary = this.getPrimaryCookie();
   var severityColor = RGB.between(RGB.LOW, primary.severity, RGB.HIGH);
-  var title = this.baseName + " (sites: " + primary.getSourceCount() + ", history:" + primary.getHistoryLength() + ")";
+  var rootNode;
   builder
-    .addEventListener('click', this.onClick.bind(this, builder.getCurrentNode()))
+    .delegate(function (_, node) { rootNode = node; })
     .begin("div")
-      .addClass("domain")
-      .appendText(title)
-    .end()
-    .begin("div")
-      .addClass("sources")
-      .begin("span")
-        .addClass("label")
-        .appendText("Sent from ")
+      .addClass("alert")
+      .addEventListener("click", this.onClick.bind(this, rootNode))
+      .begin("div")
+        .begin("span")
+          .addClass("domain")
+          .appendText(this.baseName)
+        .end("span")
+        .begin("span")
+          .addClass("domainStats")
+          .appendText(" (sites: ")
+          .appendText(primary.getSourceCount())
+          .appendText(", history: ")
+          .appendText(primary.getHistoryLength())
+          .appendText(")")
+        .end("span")
       .end()
-      .forEach(primary.baseDomainsSeen, function (source, builder, index) {
-        builder
-          .appendText(index == 0 ? "" : ", ")
-          .begin("span")
-            .addClass("source")
-            .appendText(source)
-          .end();
-      })
-      .appendText(".")
-    .end()
-    .begin("div")
-      .addClass("severity")
-      .setStyle("background", severityColor)
-      .setStyle("borderLeft", "1px solid " + severityColor.darker(.1))
+      .begin("div")
+        .addClass("sources")
+        .begin("span")
+          .addClass("label")
+          .appendText("Sites tracked: ")
+        .end()
+        .forEach(primary.baseDomainsSeen, function (source, builder, index) {
+          builder
+            .appendText(index == 0 ? "" : ", ")
+            .begin("span")
+              .addClass("source")
+              .appendText(source)
+            .end();
+        })
+        .appendText(".")
+      .end()
+      .begin("div")
+        .addClass("severity")
+        .setStyle("background", severityColor)
+        .setStyle("borderLeft", "1px solid " + severityColor.darker(.1))
+      .end()
     .end();
 };
 
@@ -299,7 +314,6 @@ AlertCollection.prototype.display = function (builder) {
       var alertInfo = baseNames.get(baseName);
       builder
         .begin("div")
-          .addClass("alert")
           .delegate(alertInfo.display.bind(alertInfo))
         .end();
     });

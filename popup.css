@@ -1,5 +1,5 @@
 body {
-  font-family: sans-serif;
+  font-family: Georgia;
   font-size: 10pt;
 }
 
@@ -35,12 +35,16 @@ body {
   font-weight: bold;
 }
 
+.domainStats {
+  font-family: Georgia, serif;
+  color: gray;
+}
+
 .source {
-  text-decoration: underline;
+  font-style: italic;
 }
 
 .label {
-  font-weight: bold;
 }
 
 .emptyBox {
