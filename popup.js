@@ -9,7 +9,7 @@ function DomBuilder(parent) {
 /**
  * Returns a new dom builder that attaches to the given parent.
  */
-function attach(parent) {
+DomBuilder.attach = function (parent) {
   return new DomBuilder(parent);
 }
 
@@ -86,12 +86,24 @@ DomBuilder.prototype.getCurrentNode = function () {
 };
 
 /**
- * Invokes the given thunk with the current node.
+ * Invokes the given thunk with this builder and the current node.
  */
-DomBuilder.prototype.withThis = function (thunk) {
-  thunk(this);
+DomBuilder.prototype.delegate = function (thunk) {
+  thunk(this, this.current);
   return this;
-}
+};
+
+/**
+ * Invokes the given thunk for each element in the collection, passing the
+ * element, this builder, and the index of the element. Useful for building
+ * subtrees of variable length.
+ */
+DomBuilder.prototype.forEach = function (elms, thunk) {
+  elms.forEach(function (elm, index) {
+    thunk(elm, this, index);
+  }.bind(this));
+  return this;
+};
 
 /**
  * Adds a listener for the given event type to the current element.
@@ -204,23 +216,8 @@ AlertInfo.prototype.getPrimaryCookie = function () {
  */
 AlertInfo.prototype.display = function (builder) {
   var primary = this.getPrimaryCookie();
-  function setSeverityStyle(builder) {
-    var color = RGB.between(RGB.LOW, primary.severity, RGB.HIGH);
-    builder
-      .setStyle("background", color)
-      .setStyle("borderLeft", "1px solid " + color.darker(.1));
-  }
+  var severityColor = RGB.between(RGB.LOW, primary.severity, RGB.HIGH);
   var title = this.baseName + " (sites: " + primary.getSourceCount() + ", history:" + primary.getHistoryLength() + ")";
-  function addSources(builder) {
-    primary.baseDomainsSeen.forEach(function (source, index) {
-      builder
-        .appendText(index == 0 ? "" : ", ")
-        .begin("span")
-          .addClass("source")
-          .appendText(source)
-        .end();
-    });
-  }
   builder
     .addEventListener('click', this.onClick.bind(this, builder.getCurrentNode()))
     .begin("div")
@@ -233,12 +230,20 @@ AlertInfo.prototype.display = function (builder) {
         .addClass("label")
         .appendText("Sent from ")
       .end()
-      .withThis(addSources)
+      .forEach(primary.baseDomainsSeen, function (source, builder, index) {
+        builder
+          .appendText(index == 0 ? "" : ", ")
+          .begin("span")
+            .addClass("source")
+            .appendText(source)
+          .end();
+      })
       .appendText(".")
     .end()
     .begin("div")
       .addClass("severity")
-      .withThis(setSeverityStyle)
+      .setStyle("background", severityColor)
+      .setStyle("borderLeft", "1px solid " + severityColor.darker(.1))
     .end();
 };
 
@@ -248,14 +253,12 @@ AlertInfo.prototype.onClick = function (root, event) {
     this.openElement = null;
   } else {
     var primary = this.getPrimaryCookie();
-    attach(root)
+    DomBuilder.attach(root)
       .begin("ul")
-      .withThis(function (builder) {
-        this.openElement = builder.getCurrentNode();
-        primary.history.forEach(function (entry) {
-          entry.display(builder);
-        });
-      }.bind(this))
+      .delegate(function (_, node) { this.openElement = node; }.bind(this))
+      .forEach(primary.history, function (entry, builder) {
+        entry.display(builder);
+      })
       .end();
   }
 };
@@ -279,7 +282,7 @@ AlertCollection.prototype.isEmpty = function () {
 /**
  * Updates the DOM to display information about this set of alerts.
  */
-AlertCollection.prototype.updateDisplay = function (builder) {
+AlertCollection.prototype.display = function (builder) {
   var baseNames = this.baseNames;
   var sortedNames = baseNames.keys();
   sortedNames.sort(function (a, b) {
@@ -290,24 +293,17 @@ AlertCollection.prototype.updateDisplay = function (builder) {
       return sourceDiff;
     return bCookie.getHistoryLength() - aCookie.getHistoryLength();
   });
-  function addAlerts(builder) {
-    sortedNames.forEach(function (baseName) {
+  builder
+    .clearChildren()
+    .forEach(sortedNames, function (baseName, builder) {
       var alertInfo = baseNames.get(baseName);
       builder
         .begin("div")
           .addClass("alert")
-          .withThis(alertInfo.display.bind(alertInfo))
+          .delegate(alertInfo.display.bind(alertInfo))
         .end();
     });
-  }
-  builder
-    .clearChildren()
-    .withThis(addAlerts);
 };
-
-function Timeline(root) {
-  this.root = root;
-}
 
 /**
  * Handles messages from the badge.
@@ -320,7 +316,7 @@ function displayAlerts(message) {
   } else {
     var main = document.getElementById("main");
     main.style.display = null;
-    alerts.updateDisplay(attach(main));
+    alerts.display(DomBuilder.attach(main));
   }
 }
 
