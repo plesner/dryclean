@@ -44,6 +44,7 @@ CookieRecord.prototype.toJSON = function () {
       domain: this.protoCookie.domain,
       path: this.protoCookie.path,
       name: this.protoCookie.name,
+      session: this.protoCookie.session,
       value: this.lastSeenValue
     },
     baseNamesSeen: this.baseNamesSeen.keys(),
@@ -57,17 +58,17 @@ CookieRecord.prototype.toJSON = function () {
  * Updates this record according to the given new cookie value. If the value
  * changes we flush all history.
  */
-CookieRecord.prototype.updateValue = function (value) {
+CookieRecord.prototype.updateValue = function (cookie) {
   // If it has been sent with a different value we clear the record.
-  if (value != this.lastSeenValue)
-    this.resetValue(value);
+  if (cookie.value != this.lastSeenValue)
+    this.resetValue(cookie.value);
 };
 
 /**
  * Records the fact that this cookie has been sent to a third party.
  */
 CookieRecord.prototype.notifySentToThirdParty = function (timestamp, target, referer, cookie) {
-  this.updateValue(cookie.value);
+  this.updateValue(cookie);
   this.baseNamesSeen.put(referer.getBaseName(), true);
   this.baseDomainsSeen.put(referer.getBaseDomain(), true);
   this.history.push(new CookieTransmission(target, referer, timestamp));
@@ -81,24 +82,48 @@ CookieRecord.prototype.getBaseName = function () {
 };
 
 /**
- * Returns the severity of the activity recorded by this object. -1 means
- * no severity, a value between 0 and 1 means nontrivial severity.
+ * Given a number > 0 maps the value to a number between 0 and 1 that retains
+ * the ordering.
+ */
+function slopeTowardsOne(x) {
+  // We take the log to distribute better between larger values, otherwise
+  // we approach 1 too quickly.
+  var logX = Math.log(x + 1);
+  return logX / (logX + 1);
+}
+
+/**
+ * Scales a value between 0 and 1 linearly into the interval between min and
+ * max.
+ */
+function scaleInto(value, min, max) {
+  return min + value * (max - min);
+}
+
+/**
+ * Returns the severity of the activity recorded by this object. 0 means
+ * no severity, a value between between 0 and 1 means nontrivial severity.
  */
 CookieRecord.prototype.getSeverity = function () {
-  if (this.baseNamesSeen.getSize() < 5) {
-    return -1;
-  } else if (this.baseNamesSeen.size < 10) {
-    return 0;
-  } else if (this.baseNamesSeen.size < 20) {
-    return 0.5;
-  } else {
-    return 1;
-  }
+  // If this is not an identifying cookie don't even bother.
+  if (!this.protoCookie.isIdentifying())
+    return 0.0;
+  // How severe is the number of sites visited?
+  var baseNameCount = this.baseNamesSeen.getSize();
+  var siteCountSeverity = Math.min(baseNameCount, baseNameCountMax) / baseNameCountMax;
+  // How severe is the persistence of this cookie, session or permanent?
+  var persistenceSeverity = this.protoCookie.session ? 0.5 : 1.0;
+  // How severe is the history length of this cookie? This is really only
+  // intended to be used as a tie breaker so the interval it can influence is
+  // small.
+  var historySize = this.history.length;
+  var historySeverity = scaleInto(slopeTowardsOne(historySize), 0.9, 1.0);
+  return siteCountSeverity * persistenceSeverity * historySeverity;
 };
 
 function CookieData(protoCookie) {
   this.record = new CookieRecord(protoCookie);
-  this.lastSeenSeverity = -1;
+  this.lastSeenSeverity = 0;
 }
 
 /**
@@ -154,8 +179,8 @@ TrackingCookieDetector.prototype.fireSeverityChanged = function (record, severit
  */
 TrackingCookieDetector.prototype.removeRecord = function (cookie) {
   var oldData = this.cookieData.remove(cookie.getId());
-  if (oldData && oldData.lastSeenSeverity != -1)
-    this.fireSeverityChanged(oldData.record, -1);
+  if (oldData && oldData.lastSeenSeverity != 0)
+    this.fireSeverityChanged(oldData.record, 0);
 };
 
 /**
@@ -164,7 +189,7 @@ TrackingCookieDetector.prototype.removeRecord = function (cookie) {
 TrackingCookieDetector.prototype.cookieUpdated = function (cookie) {
   var data = this.cookieData.get(cookie.getId());
   if (data != null)
-    data.record.updateValue(cookie.value);
+    data.record.updateValue(cookie);
 };
 
 /**
@@ -246,10 +271,11 @@ RequestProcessor.prototype.handleSendHeaders = function (requestInfo) {
  * A wrapper around a cookie's data that discards anything that's not relevant
  * to what we're doing.
  */
-function StrippedCookie(domain, path, name, value) {
+function StrippedCookie(domain, path, name, session, value) {
   this.domain = domain;
   this.path = path;
   this.name = name;
+  this.session = session;
   this.value = value;
   this.id = this.buildId();
 }
@@ -259,6 +285,13 @@ function StrippedCookie(domain, path, name, value) {
  */
 StrippedCookie.prototype.getId = function () {
   return this.id;
+};
+
+/**
+ * Can this cookie reliably identify a user?
+ */
+StrippedCookie.prototype.isIdentifying = function () {
+  return this.value.length >= 10;
 };
 
 /**
@@ -276,7 +309,7 @@ StrippedCookie.prototype.buildId = function () {
  */
 StrippedCookie.from = function (cookie) {
   return new StrippedCookie(cookie.domain, cookie.path, cookie.name,
-    cookie.value);
+    cookie.session, cookie.value);
 }
 
 /**
@@ -299,12 +332,14 @@ function BadgeController(browser) {
   this.browser = browser;
   this.baseNames = new Map();
   browser.addOnRequestListener(this.onRequest.bind(this));
-  this.browser.setBadgeText({text: ""});
+  this.updateBadgeState();
+  this.lastReportedSeverity = 0.0;
+  this.lastReportedBaseNames = new Map();
 }
 
 BadgeController.prototype.onSeverityChanged = function (record, severity) {
   var baseName = record.getBaseName();
-  if (severity == -1) {
+  if (severity == 0) {
     this.removeRecord(baseName, record);
   } else {
     this.updateRecord(baseName, record);
@@ -352,25 +387,38 @@ BadgeController.prototype.removeRecord = function (baseName, record) {
 };
 
 /**
- * Returns the current highest severity.
+ * Returns the alert data relevant to displaying the badge. The given record
+ * and severity are the values that have changed.
  */
-BadgeController.prototype.getHighestSeverity = function () {
-  var value = -1;
+BadgeController.prototype.calcBadgeData = function () {
+  var result = {
+    highestSeverity: 0,
+    baseNamesOverThreshold: new Map()
+  };
   this.baseNames.forEach(function (baseName, records) {
     records.forEach(function (id, record) {
       var severity = record.getSeverity();
-      if (severity > value)
-        value = severity;
+      result.highestSeverity = Math.max(result.highestSeverity, severity);
+      if (severity >= displayBadgeSeverity)
+        result.baseNamesOverThreshold.put(baseName, true);
     });
   });
-  return value;
+  return result;
 };
 
+/**
+ * Updates the badge state based on all the information stored in this
+ * controller.
+ */
 BadgeController.prototype.updateBadgeState = function () {
-  var severity = this.getHighestSeverity();
-  var color = RGB.between(RGB.LOW, severity, RGB.HIGH);
-  this.browser.setBadgeBackgroundColor({color: String(color)});
-  this.browser.setBadgeText({text: String(this.baseNames.getSize())});
+  var data = this.calcBadgeData();
+  if (data.highestSeverity >= displayBadgeSeverity) {
+    var color = getSeverityColor(data.highestSeverity);
+    this.browser.setBadgeBackgroundColor({color: String(color)});
+    this.browser.setBadgeText({text: String(data.baseNamesOverThreshold.getSize())});
+  } else {
+    this.browser.setBadgeText({text: ""});    
+  }
 };
 
 BadgeController.prototype.toJSON = function () {

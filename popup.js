@@ -184,6 +184,10 @@ CookieInfo.prototype.getSourceCount = function () {
   return this.baseNamesSeen.length;
 };
 
+CookieInfo.prototype.getSeverity = function () {
+  return this.severity;
+};
+
 /**
  * A collection of alerts belonging to a particular domain base.
  */
@@ -217,7 +221,7 @@ AlertInfo.prototype.getPrimaryCookie = function () {
  */
 AlertInfo.prototype.display = function (builder) {
   var primary = this.getPrimaryCookie();
-  var severityColor = RGB.between(RGB.LOW, primary.severity, RGB.HIGH);
+  var severityColor = getSeverityColor(primary.severity);
   var rootNode;
   builder
     .delegate(function (_, node) { rootNode = node; })
@@ -295,26 +299,32 @@ AlertCollection.prototype.isEmpty = function () {
 }
 
 /**
+ * Returns a list of the alerts to display, sorted by severity.
+ */
+AlertCollection.prototype.getAlertsToDisplay = function () {
+  var sortedAlerts = [];
+  this.baseNames.forEach(function (name, alert) {
+    if (alert.getPrimaryCookie().getSeverity() >= displayInPopupSeverity)
+      sortedAlerts.push(alert);
+  });
+  sortedAlerts.sort(function (alertA, alertB) {
+    var aCookie = alertA.getPrimaryCookie();
+    var bCookie = alertB.getPrimaryCookie();
+    return bCookie.getSeverity() - aCookie.getSeverity();
+  });
+  return sortedAlerts;
+};
+
+/**
  * Updates the DOM to display information about this set of alerts.
  */
 AlertCollection.prototype.display = function (builder) {
-  var baseNames = this.baseNames;
-  var sortedNames = baseNames.keys();
-  sortedNames.sort(function (a, b) {
-    var aCookie = baseNames.get(a).getPrimaryCookie();
-    var bCookie = baseNames.get(b).getPrimaryCookie();
-    var sourceDiff = bCookie.getSourceCount() - aCookie.getSourceCount();
-    if (sourceDiff != 0)
-      return sourceDiff;
-    return bCookie.getHistoryLength() - aCookie.getHistoryLength();
-  });
   builder
     .clearChildren()
-    .forEach(sortedNames, function (baseName, builder) {
-      var alertInfo = baseNames.get(baseName);
+    .forEach(this.getAlertsToDisplay(), function (alert, builder) {
       builder
         .begin("div")
-          .delegate(alertInfo.display.bind(alertInfo))
+          .delegate(alert.display.bind(alert))
         .end();
     });
 };

@@ -1,4 +1,19 @@
 /**
+ * The number of base names beyond which we don't bother to count.
+ */
+var baseNameCountMax = 20;
+
+/**
+ * At which severity do we display a count on the badge?
+ */
+var displayBadgeSeverity = 0.25;
+
+/**
+ * At which severity do we display an alert in the popup?
+ */
+var displayInPopupSeverity = 0.15;
+
+/**
  * Shorthand for the promise constructor.
  */
 var Promise = promise.Promise;
@@ -284,5 +299,14 @@ RGB.between = function (from, percent, to) {
 };
 
 RGB.HIGH = new RGB(0xDB, 0x25, 0x25);
-RGB.LOW = new RGB(0xFF, 0xD7, 0x00);
+RGB.MIDDLE = new RGB(0xFF, 0xD7, 0x00);
+RGB.LOW = new RGB(0xFF, 0xFF, 0xFF);
 RGB.BLACK = new RGB(0x00, 0x00, 0x00);
+
+function getSeverityColor(level) {
+  if (level < 0.5) {
+    return RGB.between(RGB.LOW, 2 * level, RGB.MIDDLE);
+  } else {
+    return RGB.between(RGB.MIDDLE, 2 * (level - 0.5), RGB.HIGH);
+  }
+}

@@ -141,8 +141,9 @@ function testUrlBaseName() {
   assertEquals("guardian", getBase("http://a.b.guardian.co.uk/fas"));
 }
 
-function newCookie(domain, path, name, valueOpt) {
-  return StrippedCookie.from({domain: domain, path: path, name: name, value: valueOpt});
+function newCookie(domain, path, name, sessionOpt, valueOpt) {
+  return StrippedCookie.from({domain: domain, path: path, name: name,
+    session: sessionOpt, value: valueOpt});
 }
 
 function testCookieIds() {
@@ -171,6 +172,16 @@ function testMaps() {
   assertEquals(1, map.getSize());
   assertEquals(null, map.remove("foo"));
   assertEquals(1, map.getSize());
+}
+
+function testIdentifying() {
+  function isValueIdentifying(value) {
+    return newCookie("x", "x", "x", false, value).isIdentifying();
+  }
+  assertFalse(isValueIdentifying(""));
+  assertFalse(isValueIdentifying("1"));
+  assertFalse(isValueIdentifying("foobar"));
+  assertTrue(isValueIdentifying("adasadlkfnlqwkenclsainrslaienwpa"));
 }
 
 function testThirdPartyDetection() {
