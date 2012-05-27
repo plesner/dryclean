@@ -1,6 +1,6 @@
 {
   "name": "Tracking Cookie Monitor",
-  "version": "0.1",
+  "version": "0.2",
   "description": "Monitors tracking cookie activity",
   "background_page": "background.html",
   "options_page": "options.html",

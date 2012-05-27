@@ -289,30 +289,34 @@ function AlertCollection(json) {
   this.baseNames = Map.wrap(json.baseNames).map(function (cookies, baseName) {
     return new AlertInfo(baseName, cookies);
   });
+  this.alertsToDisplay = null;
 }
 
 /**
- * Does this collection hold any alerts?
+ * Are there any alerts to display?
  */
 AlertCollection.prototype.isEmpty = function () {
-  return this.baseNames.getSize() == 0;
+  return this.getAlertsToDisplay().length == 0;
 }
 
 /**
  * Returns a list of the alerts to display, sorted by severity.
  */
 AlertCollection.prototype.getAlertsToDisplay = function () {
-  var sortedAlerts = [];
-  this.baseNames.forEach(function (name, alert) {
-    if (alert.getPrimaryCookie().getSeverity() >= displayInPopupSeverity)
-      sortedAlerts.push(alert);
-  });
-  sortedAlerts.sort(function (alertA, alertB) {
-    var aCookie = alertA.getPrimaryCookie();
-    var bCookie = alertB.getPrimaryCookie();
-    return bCookie.getSeverity() - aCookie.getSeverity();
-  });
-  return sortedAlerts;
+  if (!this.alertsToDisplay) {
+    var sortedAlerts = [];
+    this.baseNames.forEach(function (name, alert) {
+      if (alert.getPrimaryCookie().getSeverity() >= displayInPopupSeverity)
+        sortedAlerts.push(alert);
+    });
+    sortedAlerts.sort(function (alertA, alertB) {
+      var aCookie = alertA.getPrimaryCookie();
+      var bCookie = alertB.getPrimaryCookie();
+      return bCookie.getSeverity() - aCookie.getSeverity();
+    });
+    this.alertsToDisplay = sortedAlerts;
+  }
+  return this.alertsToDisplay;
 };
 
 /**
