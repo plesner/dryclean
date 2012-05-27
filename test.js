@@ -7,17 +7,24 @@ function runTest() {
 
 function doTest(thunk) {
   var results = document.getElementById("results");
-  var li = document.createElement("li");
-  results.appendChild(li);
-  li.innerText = thunk.name;
+  var li;
+  DomBuilder
+    .attach(results)
+    .begin("li")
+      .delegate(function (_, node) { li = node; })
+      .appendText(thunk.name)
+    .end();
   Promise.defer(function () {
+    var builder =  DomBuilder.attach(li);
     try {
-      thunk();
-      li.innerText += " succeeded."
-      li.style.color = "green";
+      thunk(li);
+      builder
+        .appendText(" succeeded")
+        .setStyle("color", "green");
     } catch (e) {
-      li.innerText += " failed: " + e;
-      li.style.color = "red";
+      builder
+        .appendText(" failed: " + e)
+        .setStyle("color", "red");
     }
   });
 }
@@ -204,4 +211,31 @@ function testThirdPartyDetection() {
   // No cookies or referer
   assertEquals([false], controller.fireRequest("http://www.foo.com", "http://www.bar.com", {}));
   assertEquals([false], controller.fireRequest(null, "http://www.bar.com", {Cookie: "blah"}));
+}
+
+function testGradualColors(root) {
+  var gradients = [
+    [RGB.WHITE, RGB.RED, RGB.GREEN, RGB.BLUE, RGB.BLACK],
+    SEVERITY_GRADIENT.concat([RGB.BLACK]),
+    SEVERITY_GRADIENT,
+  ];
+  gradients.forEach(function (gradient) {
+    var builder = DomBuilder
+      .attach(root)
+      .begin("div")
+      .setStyle("float", "right")
+    for (var i = 0; i <= 100; i++) {
+      var part = i / 100;
+      var color = RGB.gradient(part, gradient);
+      builder
+        .begin("div")
+          .setStyle("width", "3px")
+          .setStyle("height", "3px")
+          .setStyle("margin", "1px")
+          .setStyle("background", color)
+          .setStyle("float", "left")
+        .end();
+    }
+    builder.end();
+  });
 }

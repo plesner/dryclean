@@ -1,19 +1,4 @@
 /**
- * The number of base names beyond which we don't bother to count.
- */
-var baseNameCountMax = 20;
-
-/**
- * At which severity do we display a count on the badge?
- */
-var displayBadgeSeverity = 0.25;
-
-/**
- * At which severity do we display an alert in the popup?
- */
-var displayInPopupSeverity = 0.15;
-
-/**
  * Shorthand for the promise constructor.
  */
 var Promise = promise.Promise;
@@ -224,49 +209,6 @@ Url.parse = function (url) {
 };
 
 /**
- * Given a number of elements and a probability, returns a value X such that
- * if a uniformly random element is selected X times out of the total set the
- * likelihood of picking the same one is at most the given probability.
- */
-function getSeparableSetWithProbability(elementCount, collProb) {
-  var noCollProb = (1 - collProb);
-  return (Math.sqrt(8 * elementCount * Math.log(1 / noCollProb) + 1) + 1) / 2;
-}
-
-/**
- * Given a number of elements of a set S returns the size of the set T that
- * can be reliably distinguished by assigning each element in T a uniformly
- * random element from S.
- *
- * This is an expensive operation and should only be used for testing and
- * tweaking getSeparableSetSizeEstimate.
- */
-function getSeparableSetSize(elementCount) {
-  var lastCurrent = 0;
-  var current = Math.sqrt(elementCount);
-  while (Math.abs(current - lastCurrent) > 0.0001) {
-    var nextCurrent = getSeparableSetWithProbability(elementCount, 1 / current);
-    lastCurrent = current;
-    current = nextCurrent;
-  }
-  return current;
-}
-
-/**
- * Returns an estimate for getSeparableSetSize base on running exponential
- * regression on getSeparableSetSize. Is much cheaper than getSeparableSetSize.
- *
- * Calculated using the "Exponential With Offset" regression at zunzun.com.
- */
-function getSeparableSetSizeEstimate(elementCount) {
-  var A = 1.2599157851973919;
-  var B = 0.23104914467081800;
-  var O = 0.51061745965509431;
-  var bitCount = Math.log(elementCount) / Math.LN2;
-  return A * Math.exp(B * bitCount) + O;
-}
-
-/**
  * Simple wrapper around a rgb color.
  */
 function RGB(r, g, b) {
@@ -275,8 +217,11 @@ function RGB(r, g, b) {
   this.b = b;
 }
 
-RGB.prototype.darker = function (percent) {
-  return RGB.between(this, percent, RGB.BLACK);
+/**
+ * Returns a color that is the given ratio darker than this one.
+ */
+RGB.prototype.darker = function (ratio) {
+  return RGB.between(this, ratio, RGB.BLACK);
 };
 
 RGB.prototype.toString = function () {
@@ -291,22 +236,39 @@ RGB.prototype.toString = function () {
   return "#" + toHex(this.r) + toHex(this.g) + toHex(this.b);
 };
 
-RGB.between = function (from, percent, to) {
-  var r = (to.r * percent) + (from.r * (1 - percent));
-  var g = (to.g * percent) + (from.g * (1 - percent));
-  var b = (to.b * percent) + (from.b * (1 - percent));
+/**
+ * Returns the color that is the given ratio (0 to 1) between from and to.
+ */
+RGB.between = function (from, ratio, to) {
+  var r = (to.r * ratio) + (from.r * (1 - ratio));
+  var g = (to.g * ratio) + (from.g * (1 - ratio));
+  var b = (to.b * ratio) + (from.b * (1 - ratio));
   return new RGB(r, g, b);
 };
 
-RGB.HIGH = new RGB(0xDB, 0x25, 0x25);
-RGB.MIDDLE = new RGB(0xFF, 0xD7, 0x00);
-RGB.LOW = new RGB(0xFF, 0xFF, 0xFF);
-RGB.BLACK = new RGB(0x00, 0x00, 0x00);
+/**
+ * Returns the color that is the given ratio (0 to 1) along the way of a
+ * gradient going between the specified list of colors.
+ */
+RGB.gradient = function (ratio, colors) {
+  var stepCount = colors.length - 1;
+  var gradient = ratio * stepCount;
+  var gradientStep = Math.min(gradient << 0, stepCount - 1);
+  return RGB.between(colors[gradientStep], gradient - gradientStep, colors[gradientStep+1]);
+};
 
-function getSeverityColor(level) {
-  if (level < 0.5) {
-    return RGB.between(RGB.LOW, 2 * level, RGB.MIDDLE);
-  } else {
-    return RGB.between(RGB.MIDDLE, 2 * (level - 0.5), RGB.HIGH);
-  }
+RGB.WARM_RED = new RGB(0xDB, 0x25, 0x25);
+RGB.WARM_YELLOW = new RGB(0xFF, 0xD7, 0x00);
+RGB.LOW = new RGB(0xFF, 0xFF, 0xFF);
+RGB.WHITE = new RGB(0xFF, 0xFF, 0xFF);
+RGB.BLACK = new RGB(0x00, 0x00, 0x00);
+RGB.RED = new RGB(0xFF, 0x00, 0x00);
+RGB.GREEN = new RGB(0x00, 0xFF, 0x00);
+RGB.BLUE = new RGB(0x00, 0x00, 0xFF);
+
+/**
+ * Returns the color to use for the specified severity.
+ */
+function getSeverityColor(severity) {
+  return RGB.gradient(severity, SEVERITY_GRADIENT);
 }
