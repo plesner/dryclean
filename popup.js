@@ -96,7 +96,7 @@ AlertInfo.prototype.getPrimaryCookie = function () {
 
 AlertInfo.prototype.getSeverity = function () {
   if (this.isIgnored()) {
-    return 0.0;
+    return displayInPopupSeverity;
   } else {
     return this.getPrimaryCookie().getSeverity();
   }
