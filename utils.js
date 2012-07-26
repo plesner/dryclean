@@ -272,3 +272,52 @@ RGB.BLUE = new RGB(0x00, 0x00, 0xFF);
 function getSeverityColor(severity) {
   return RGB.gradient(severity, SEVERITY_GRADIENT);
 }
+
+/**
+ * A read/write map connected to local storage.
+ */
+function MapStorage(key, map) {
+  this.key = key;
+  this.map = map;
+  this.listeners = [];
+  addEventListener("storage", this.onChange.bind(this), false);
+}
+
+MapStorage.prototype.addChangeListener = function (thunk) {
+  this.listeners.push(thunk);
+};
+
+MapStorage.prototype.onChange = function (event) {
+  console.log(event);
+  if (event.key == this.key) {
+    var newMap = MapStorage.parseMap(event.newValue);
+    this.map = newMap;
+    this.listeners.forEach(function (thunk) {
+      thunk(newMap);
+    });
+  }
+};
+
+MapStorage.prototype.put = function (key, value) {
+  this.map.put(key, value);
+  localStorage.setItem(this.key, JSON.stringify(this.map));
+};
+
+MapStorage.prototype.get = function (key) {
+  return this.map.get(key);
+};
+
+MapStorage.parseMap = function (value) {
+  if (value) {
+    try {
+      return Map.wrap(JSON.parse(value));
+    } catch (se) {
+      // ignore
+    }
+  }
+  return new Map();
+};
+
+MapStorage.create = function (key) {
+  return new MapStorage(key, MapStorage.parseMap(localStorage[key]));
+};

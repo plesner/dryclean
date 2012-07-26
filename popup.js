@@ -1,127 +1,3 @@
-/**
- * Really quick and dirty dom construction framework.
- */
-function DomBuilder(parent) {
-  this.stack = [parent];
-  this.current = parent;
-}
-
-/**
- * Returns a new dom builder that attaches to the given parent.
- */
-DomBuilder.attach = function (parent) {
-  return new DomBuilder(parent);
-}
-
-/**
- * Begins a new element with the given tag name, attaching it to the current
- * element.
- */
-DomBuilder.prototype.begin = function (tagName) {
-  var elm = document.createElement(tagName);
-  this.current.appendChild(elm);
-  this.stack.push(elm);
-  this.current = elm;
-  return this;
-};
-
-/**
- * Removes all children under the current element.
- */
-DomBuilder.prototype.clearChildren = function () {
-  while (this.current.hasChildNodes())
-    this.current.removeChild(this.current.firstChild);
-  return this;
-}
-
-/**
- * Appends a string to the current element.
- */
-DomBuilder.prototype.appendText = function (str) {
-  this.current.appendChild(document.createTextNode(str));
-  return this;
-};
-
-/**
- * Sets an attribute of the current element.
- */
-DomBuilder.prototype.setAttribute = function (name, value) {
-  this.current[name] = value;
-  return this;
-};
-
-/**
- * Sets a style attribute on the current node.
- */
-DomBuilder.prototype.setStyle = function (name, value) {
-  this.current.style[name] = value;
-  return this;
-}
-
-/**
- * Adds a CSS class name to the current element.
- */
-DomBuilder.prototype.addClass = function(name) {
-  if (this.current.className) {
-    this.current.className += " " + name;
-  } else {
-    this.current.className = name;
-  }
-  return this;
-};
-
-/**
- * Invokes the given thunk with the current node.
- */
-DomBuilder.prototype.withCurrentNode = function (thunk) {
-  thunk(this.current);
-  return this;
-};
-
-/**
- * Returns the current node.
- */
-DomBuilder.prototype.getCurrentNode = function () {
-  return this.current;
-};
-
-/**
- * Invokes the given thunk with this builder and the current node.
- */
-DomBuilder.prototype.delegate = function (thunk) {
-  thunk(this, this.current);
-  return this;
-};
-
-/**
- * Invokes the given thunk for each element in the collection, passing the
- * element, this builder, and the index of the element. Useful for building
- * subtrees of variable length.
- */
-DomBuilder.prototype.forEach = function (elms, thunk) {
-  elms.forEach(function (elm, index) {
-    thunk(elm, this, index);
-  }.bind(this));
-  return this;
-};
-
-/**
- * Adds a listener for the given event type to the current element.
- */
-DomBuilder.prototype.addEventListener = function (event, handler) {
-  this.current.addEventListener(event, handler);
-  return this;
-}
-
-/**
- * Ends the current element and replaces it as the current with its parent.
- */
-DomBuilder.prototype.end = function () {
-  this.stack.pop();
-  this.current = this.stack[this.stack.length-1];
-  return this;
-};
-
 function HistoryEntry(json) {
   this.target = json.target;
   this.referer = json.referer;
@@ -191,11 +67,13 @@ CookieInfo.prototype.getSeverity = function () {
 /**
  * A collection of alerts belonging to a particular domain base.
  */
-function AlertInfo(baseName, cookies) {
+function AlertInfo(ignored, baseName, cookies) {
+  this.ignored = ignored;
   this.baseName = baseName;
   this.cookies = cookies.map(function (cookie) { return new CookieInfo(cookie); });
   this.primaryCookieCache = null;
-  this.openElement = null;
+  this.openSettings = null;
+  this.containerNode = null;
 }
 
 /**
@@ -216,17 +94,35 @@ AlertInfo.prototype.getPrimaryCookie = function () {
   return this.primaryCookieCache = primaryCookie;
 };
 
+AlertInfo.prototype.getSeverity = function () {
+  if (this.isIgnored()) {
+    return 0.0;
+  } else {
+    return this.getPrimaryCookie().getSeverity();
+  }
+};
+
+/**
+ * Is this alert explicitly ignored?
+ */
+AlertInfo.prototype.isIgnored = function () {
+  return !!this.ignored.get(this.baseName);
+};
+
 /**
  * Displays this information in the DOM using the specified root as the parent.
  */
 AlertInfo.prototype.display = function (builder) {
+  var isIgnored = this.isIgnored();
   var primary = this.getPrimaryCookie();
   var severityColor = getSeverityColor(primary.severity);
   var rootNode;
+  var containerNode;
   builder
     .delegate(function (_, node) { rootNode = node; })
     .begin("div")
-      .addClass("alert")
+      .delegate(function (_, node) { containerNode = node; })
+      .addClass(isIgnored ? "alert ignored" : "alert")
       .addEventListener("click", this.onClick.bind(this, rootNode))
       .begin("div")
         .begin("span")
@@ -264,30 +160,75 @@ AlertInfo.prototype.display = function (builder) {
         .setStyle("borderLeft", "1px solid " + severityColor.darker(.1))
       .end()
     .end();
+  this.containerNode = containerNode;
+};
+
+/**
+ * Controller for the settings box for an alert.
+ */
+function AlertSettings(root, info) {
+  this.root = root;
+  this.info = info;
+  this.element = null;
+}
+
+AlertSettings.prototype.close = function () {
+  this.root.removeChild(this.element);
+};
+
+AlertSettings.prototype.open = function () {
+  var element;
+  var checker;
+  DomBuilder.attach(this.root)
+    .begin("div")
+      .addClass("settings")
+      .delegate(function (_, node) { element = node; })
+      .begin("input")
+        .addClass("checker")
+        .setAttribute("type", "checkbox")
+        .setAttribute("checked", this.info.isIgnored())
+        .delegate(function (_, node) { checker = node; })
+      .end()
+      .appendText("Ignore all cookies from ")
+      .begin("b")
+        .appendText(this.info.baseName)
+      .end()
+      .appendText(".")
+    .end();
+  this.element = element;
+  checker.addEventListener("change", this.onChanged.bind(this));
+};
+
+/**
+ * Calles when the check box is clicked.
+ */
+AlertSettings.prototype.onChanged = function (event) {
+  var checked = event.srcElement.checked;
+  this.info.ignored.put(this.info.baseName, checked);
+  var builder = DomBuilder.attach(this.info.containerNode);
+  if (checked) {
+    builder.addClass("ignored");
+  } else {
+    builder.removeClass("ignored");
+  }
 };
 
 AlertInfo.prototype.onClick = function (root, event) {
-  if (this.openElement) {
-    root.removeChild(this.openElement);
-    this.openElement = null;
+  if (this.openSettings) {
+    this.openSettings.close();
+    this.openSettings = null;
   } else {
-    var primary = this.getPrimaryCookie();
-    DomBuilder.attach(root)
-      .begin("ul")
-      .delegate(function (_, node) { this.openElement = node; }.bind(this))
-      .forEach(primary.history, function (entry, builder) {
-        entry.display(builder);
-      })
-      .end();
+    this.openSettings = new AlertSettings(root, this);
+    this.openSettings.open();
   }
 };
 
 /**
  * Information about all active alerts.
  */
-function AlertCollection(json) {
+function AlertCollection(ignored, json) {
   this.baseNames = Map.wrap(json.baseNames).map(function (cookies, baseName) {
-    return new AlertInfo(baseName, cookies);
+    return new AlertInfo(ignored, baseName, cookies);
   });
   this.alertsToDisplay = null;
 }
@@ -306,13 +247,11 @@ AlertCollection.prototype.getAlertsToDisplay = function () {
   if (!this.alertsToDisplay) {
     var sortedAlerts = [];
     this.baseNames.forEach(function (name, alert) {
-      if (alert.getPrimaryCookie().getSeverity() >= displayInPopupSeverity)
+      if (alert.getSeverity() >= displayInPopupSeverity)
         sortedAlerts.push(alert);
     });
     sortedAlerts.sort(function (alertA, alertB) {
-      var aCookie = alertA.getPrimaryCookie();
-      var bCookie = alertB.getPrimaryCookie();
-      return bCookie.getSeverity() - aCookie.getSeverity();
+      return alertB.getSeverity() - alertA.getSeverity();
     });
     this.alertsToDisplay = sortedAlerts;
   }
@@ -336,10 +275,10 @@ AlertCollection.prototype.display = function (builder) {
 /**
  * Handles messages from the badge.
  */
-function displayAlerts(message) {
-  var alerts = new AlertCollection(message.state);
+function displayAlerts(ignored, message) {
+  var alerts = new AlertCollection(ignored, message.state);
   if (alerts.isEmpty()) {
-  var empty = document.getElementById("empty");
+    var empty = document.getElementById("empty");
     empty.style.display = null;
   } else {
     var main = document.getElementById("main");
@@ -349,8 +288,9 @@ function displayAlerts(message) {
 }
 
 function onLoad() {
+  var ignored = MapStorage.create("ignored");
   var browser = getBrowserController();
   browser.sendRequest("getAlerts")
-    .onFulfilled(displayAlerts)
+    .onFulfilled(displayAlerts.bind(displayAlerts, ignored))
     .onFailed(browser.getLogCallback());
 }

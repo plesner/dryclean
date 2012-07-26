@@ -335,6 +335,10 @@ function BadgeController(browser) {
   this.updateBadgeState();
   this.lastReportedSeverity = 0.0;
   this.lastReportedBaseNames = new Map();
+  this.ignored = MapStorage.create("ignored");
+  this.ignored.addChangeListener(function (value) {
+    this.updateBadgeState();
+  }.bind(this));
 }
 
 BadgeController.prototype.onSeverityChanged = function (record, severity) {
@@ -396,13 +400,15 @@ BadgeController.prototype.calcBadgeData = function () {
     baseNamesOverThreshold: new Map()
   };
   this.baseNames.forEach(function (baseName, records) {
+    if (this.ignored.get(baseName))
+      return;
     records.forEach(function (id, record) {
       var severity = record.getSeverity();
       result.highestSeverity = Math.max(result.highestSeverity, severity);
       if (severity >= displayBadgeSeverity)
         result.baseNamesOverThreshold.put(baseName, true);
     });
-  });
+  }.bind(this));
   return result;
 };
 
@@ -428,12 +434,6 @@ BadgeController.prototype.toJSON = function () {
     })
   };
 };
-
-BadgeController.prototype.handleConnection = function (port) {
-  if (port.name != "dryclean.popup")
-    return;
-  port.postMessage({state: this});
-}
 
 /**
  * Install the cookie monitoring tools.
