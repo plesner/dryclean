@@ -1,7 +1,7 @@
 /**
  * Shorthand for the promise constructor.
  */
-var Promise = promise.Promise;
+var Promise = (window.promise ? promise.Promise : null);
 
 /**
  * Converts a value to a JSON-able object or returns it unchanged if it has

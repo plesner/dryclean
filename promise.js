@@ -180,7 +180,11 @@ Promise.deferLazy = function (thunk) {
   return result;
 };
 
-Promise.defer = function (thunk) {
+/**
+ * Returns a promise that resolves to the result of calling the given function
+ * in a future turn.
+ */
+Promise.defer = function (thunk, timeoutOpt) {
   var result = new Promise();
   defer(function () {
     try {
@@ -189,7 +193,23 @@ Promise.defer = function (thunk) {
       result.fail(e);
       return;
     }
-  });
+  }, timeoutOpt);
+  return result;
+};
+
+/**
+ * Returns a promise that resolves to the given value in a future turn.
+ */
+Promise.deferValue = function (value, timeoutOpt) {
+  var result = new Promise();
+  defer(function () {
+    try {
+      result.fulfill(value);
+    } catch (e) {
+      result.fail(e);
+      return;
+    }
+  }, timeoutOpt);
   return result;
 };
 
@@ -278,6 +298,10 @@ Promise.prototype.then = function (fun) {
   return result;
 };
 
+/**
+ * Works the same as .then except that the given function returns a promise
+ * which, when resolved, becomes the value of the returned promise.
+ */
 Promise.prototype.lazyThen = function (fun) {
   var result = new Promise();
   this.then(function (value) {
